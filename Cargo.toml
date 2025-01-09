@@ -17,6 +17,7 @@ path = "src/add_device.rs"
 [dependencies]
 tokio = { version = "1.17.0", features = ["full"] }
 futures-util = { version = "0.3.21" }
+clap = { version = "4.0", features = ["derive"] }
 
 zeroconf = { git = "https://github.com/zeyugao/zeroconf-rs", optional = true }
 mdns = "3.0.0"

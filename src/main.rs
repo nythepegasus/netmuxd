@@ -8,6 +8,7 @@ use crate::raw_packet::RawPacket;
 use devices::SharedDevices;
 use log::{error, info, trace, warn};
 use plist_plus::Plist;
+use clap::{Parser, ArgAction};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::Mutex,
@@ -20,91 +21,58 @@ mod raw_packet;
 #[cfg(feature = "usb")]
 mod usb;
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct CLI {
+    #[arg(default_value_t = 27015)]
+    port: i32,
+    host: Option<String>,
+    #[arg(long="plist-storage")]
+    plist_storage: Option<String>,
+    #[cfg(unix)]
+    #[arg(long="disable-unix", action=ArgAction::SetTrue)]
+    disable_unix: bool,
+    #[arg(long="disable-mdns", action=ArgAction::SetTrue)]
+    disable_mdns: bool,
+    #[cfg(feature = "usb")]
+    #[arg(long="enable-usb", action=ArgAction::SetTrue)]
+    enable_usb: bool,
+    #[arg(long="disable-heartbeat", action=ArgAction::SetTrue)]
+    disable_heartbeat: bool,
+    #[arg(long="about", action=ArgAction::SetTrue)]
+    about: bool,
+}
+
 #[tokio::main]
 async fn main() {
     println!("Starting netmuxd");
 
     env_logger::init();
     info!("Logger initialized");
+    let args = CLI::parse();
 
-    let mut port = 27015;
-    #[cfg(unix)]
-    let mut host = None;
-    #[cfg(windows)]
-    let mut host = Some("localhost".to_string());
-    let mut plist_storage = None;
-    let mut use_heartbeat = true;
-
-    #[cfg(unix)]
-    let mut use_unix = true;
-
-    let mut use_mdns = true;
-    #[cfg(feature = "usb")]
-    let mut use_usb = false;
-
-    // Loop through args
-    let mut i = 0;
-    while i < std::env::args().len() {
-        match std::env::args().nth(i).unwrap().as_str() {
-            "-p" | "--port" => {
-                port = std::env::args().nth(i + 1).unwrap().parse::<i32>().unwrap();
-                i += 2;
-            }
-            "--host" => {
-                host = Some(std::env::args().nth(i + 1).unwrap().to_string());
-                i += 2;
-            }
-            "--plist-storage" => {
-                plist_storage = Some(std::env::args().nth(i + 1).unwrap());
-                i += 1;
-            }
-            #[cfg(unix)]
-            "--disable-unix" => {
-                use_unix = false;
-                i += 1;
-            }
-            "--disable-mdns" => {
-                use_mdns = false;
-                i += 1;
-            }
-            #[cfg(feature = "usb")]
-            "--enable-usb" => {
-                use_usb = true;
-                i += 1;
-            }
-            "--disable-heartbeat" => {
-                use_heartbeat = false;
-                i += 1;
-            }
-            "-h" | "--help" => {
-                println!("netmuxd - a network multiplexer");
-                println!("Usage:");
-                println!("  netmuxd [options]");
-                println!("Options:");
-                println!("  -p, --port <port>");
-                println!("  --host <host>");
-                println!("  --plist-storage <path>");
-                println!("  --disable-heartbeat");
-                #[cfg(unix)]
-                println!("  --disable-unix");
-                println!("  --disable-mdns");
-                #[cfg(feature = "usb")]
-                println!("  --enable-usb  (unusable for now)");
-                println!("  -h, --help");
-                println!("  --about");
-                println!("\n\nSet RUST_LOG to info, debug, warn, error, or trace to see more logs. Default is error.");
-                std::process::exit(0);
-            }
-            "--about" => {
-                println!("netmuxd - a network multiplexer");
-                println!("Copyright (c) 2020 Jackson Coxson");
-                println!("Licensed under the MIT License");
-            }
-            _ => {
-                i += 1;
-            }
-        }
+    if args.about {
+        println!("netmuxd - a network multiplexer");
+        println!("Copyright (c) 2020 Jackson Coxson");
+        println!("Licensed under the MIT License");
+        return;
     }
+
+    let port = args.port;
+    #[cfg(unix)]
+    let host = args.host;
+    #[cfg(windows)]
+    let mut host = args.host.unwrap_or("localhost".to_string());
+    let plist_storage = args.plist_storage;
+    let use_heartbeat = !args.disable_heartbeat;
+
+    #[cfg(unix)]
+    let use_unix = !args.disable_unix;
+
+    let use_mdns = !args.disable_mdns;
+    #[cfg(feature = "usb")]
+    let use_usb = args.enable_usb;
+
     info!("Collected arguments, proceeding");
 
     let data = Arc::new(Mutex::new(devices::SharedDevices::new(
